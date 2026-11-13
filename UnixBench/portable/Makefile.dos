@@ -1,0 +1,82 @@
+# UnixBench portable harness - GNU make makefile for MS-DOS (DJGPP)
+#
+#   make -f Makefile.dos              generic i386 build: ubench.exe
+#   make -f Makefile.dos ub586.exe    one CPU-specific build
+#   make -f Makefile.dos variants     ub486.exe ub586.exe ub686.exe
+#   make -f Makefile.dos clean
+#
+# Works natively under DOS with DJGPP (CC=gcc, the default there) and as a
+# cross build (build-dos.sh sets CC=i586-pc-msdosdjgpp-gcc).
+#
+# Set CWSDSTUB to the path of CWSDSTUB.EXE (from csdpmi7b.zip) to bind the
+# CWSDPMI DPMI host into each .exe, so it runs from plain DOS without
+# CWSDPMI.EXE alongside.  Without it, plain DOS needs CWSDPMI.EXE on PATH;
+# Windows DOS boxes provide DPMI themselves.
+
+CC       ?= gcc
+EXE2COFF ?= exe2coff
+CWSDSTUB ?=
+
+# OPTON matches the UnixBench Makefile's default so scores are comparable.
+# If you change it, quote it along with any results.
+OPTON   = -O3 -ffast-math
+CFLAGS  = -std=gnu89 -Wall $(OPTON)
+
+# dumb_stuff() in the arith tests ignores its input, so gcc computes it at
+# compile time and measures nothing.  As build-pint.sh does with /Od, build
+# arith unoptimized.  Quote this along with any arith results.
+ARITHFLAGS = -O0
+
+DHRYFLAGS = -DTIME -DREG=register
+SRC       = ../src
+
+# Code-generation flags.  Only the benchmark kernels get them; the runner and
+# platform layer stay i386, so a binary on a CPU too old for it can say so
+# instead of dying with an invalid opcode.
+GENERICFLAGS = -march=i386
+486FLAGS     = -march=i486
+586FLAGS     = -march=pentium
+686FLAGS     = -march=pentiumpro
+
+HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
+
+all: ubench.exe
+
+variants: ub486.exe ub586.exe ub686.exe
+
+# $(call build,exe,objdir,cpuflags,targetdef)
+define build
+$(2):
+	mkdir -p $(2)
+$(2)/ubench.o: ubench.c $(HDRS) | $(2)
+	$$(CC) $$(CFLAGS) -march=i386 -c ubench.c -o $$@
+$(2)/plat_dos.o: plat_dos.c plat.h | $(2)
+	$$(CC) $$(CFLAGS) -march=i386 $(4) -c plat_dos.c -o $$@
+$(2)/t_dhry.o: t_dhry.c $(HDRS) | $(2)
+	$$(CC) $$(CFLAGS) $(3) $$(DHRYFLAGS) -c t_dhry.c -o $$@
+$(2)/dhry_2.o: $$(SRC)/dhry_2.c $(HDRS) | $(2)
+	$$(CC) $$(CFLAGS) $(3) $$(DHRYFLAGS) -c $$(SRC)/dhry_2.c -o $$@
+$(2)/t_whets.o: t_whets.c $$(SRC)/whets.c $(HDRS) | $(2)
+	$$(CC) $$(CFLAGS) $(3) -c t_whets.c -o $$@
+$(2)/t_arith.o: t_arith.c $(HDRS) | $(2)
+	$$(CC) $$(CFLAGS) $(3) $$(ARITHFLAGS) -c t_arith.c -o $$@
+$(2)/t_hanoi.o: t_hanoi.c $(HDRS) | $(2)
+	$$(CC) $$(CFLAGS) $(3) -c t_hanoi.c -o $$@
+$(1): $(addprefix $(2)/,ubench.o plat_dos.o t_dhry.o dhry_2.o t_whets.o t_arith.o t_hanoi.o)
+	$$(CC) -o $$@ $$^ -lm
+ifneq ($$(CWSDSTUB),)
+	$$(EXE2COFF) $$@
+	cat $$(CWSDSTUB) $$(basename $$@) > $$@
+	rm -f $$(basename $$@)
+endif
+endef
+
+$(eval $(call build,ubench.exe,obj,$(GENERICFLAGS),))
+$(eval $(call build,ub486.exe,obj-486,$(486FLAGS),-DUB_TARGET_486))
+$(eval $(call build,ub586.exe,obj-586,$(586FLAGS),-DUB_TARGET_586))
+$(eval $(call build,ub686.exe,obj-686,$(686FLAGS),-DUB_TARGET_686))
+
+clean:
+	rm -rf obj obj-486 obj-586 obj-686 ubench.exe ub486.exe ub586.exe ub686.exe
+
+.PHONY: all variants clean
