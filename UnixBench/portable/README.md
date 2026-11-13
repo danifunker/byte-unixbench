@@ -1,9 +1,9 @@
 # UnixBench portable harness
 
 A single-executable build of UnixBench's CPU tests for systems that can't
-run the regular Perl/`make`/`fork` harness. The first target is
-**Windows NT 4.0 on PowerPC**. Classic Mac OS is planned, and the design
-already accounts for it (see below).
+run the regular Perl/`make`/`fork` harness: **Windows NT** (the first
+target was NT 4.0 on PowerPC), **MS-DOS** and **classic Mac OS** (68k and
+PowerPC).
 
 | Test | Source | Indexed | Baseline |
 |---|---|---|---|
@@ -156,6 +156,8 @@ comparable to a full UnixBench index score.
 plat.h          platform interface (clock, alarm, sysinfo, argv)
 plat_nt.c       Win32 implementation
 plat_dos.c      MS-DOS (DJGPP) implementation
+plat_mac.c      classic Mac OS (Retro68) implementation
+mac_console.c   classic Mac OS console window (stdout/stdin)
 plat_psx.c      POSIX implementation, for cross-checking scores
 ubench.c/.h     runner: test table, passes, scoring, index, report
 t_dhry.c        Dhrystone main loop + Proc_1..Proc_5 (from dhry_1.c)
@@ -165,6 +167,10 @@ t_hanoi.c       Tower of Hanoi
 Makefile.nt     NMAKE, for Visual C++ 4.x and later
 Makefile.dos    GNU make, for DJGPP (native or cross)
 Makefile.posix  for comparing against the stock binaries
+CMakeLists.txt  classic Mac OS, for Retro68's CMake toolchain files
+build-mac.sh    runs CMake for each Mac CPU and makes the fat application
+build-dos.sh    DJGPP cross build in Docker
+build-pint.sh   NT 4.0 on ARM (PINT) cross build in Docker
 ```
 
 ## How it differs from the Unix build
@@ -203,25 +209,122 @@ about 1.0G here, where the per-iteration flag and wrap checks dominate
 such an empty loop. Older compilers such as Visual C++ 4.x are unlikely
 to delete the kernel, but check the arith numbers before you rely on them.
 
-## Classic Mac OS: planned design
+## Building for classic Mac OS
 
-Classic Mac OS needs no changes to the tests or the runner, only a new
-`plat_mac.c`. The interface was designed around that target's limits:
+`build-mac.sh` cross-compiles with [Retro68](https://github.com/autc04/Retro68)
+(GCC 12 for 68k and PowerPC, with the Multiversal Interfaces) and CMake,
+and needs a toolchain built with both the 68k and the PowerPC compilers:
 
-- **No threads or signals.** `plat_alarm_start()` becomes a Time Manager
-  task (`InsTime`/`PrimeTime`). It runs at interrupt time, so it can only
-  store to the flag. That is the reason the interface sets a flag instead
-  of calling a callback that prints.
-- **No command line.** `plat_init()` may replace `argc`/`argv`, e.g. with
-  CodeWarrior SIOUX's `ccommand()`.
-- **Clock:** `Microseconds()` (68k and PPC), or `UpTime()` on PPC under
-  Mac OS 8.6 and later.
-- **16-bit `int` on 68k.** Build with 4-byte ints. Dhrystone's own header
-  warns that `Arr_2_Glob[8][7]` overflows with 16-bit ints. All harness
-  counters are `unsigned long` or `double`.
-- **Cooperative multitasking.** A test owns the machine until its alarm
-  fires. This is good for measurement accuracy, but the UI will not respond
-  during a pass.
+```
+./build-mac.sh
+```
+
+The script finds the toolchain from `m68k-apple-macos-gcc` on `PATH` or
+from `RETRO68` (the directory with `bin/`, `m68k-apple-macos/` and
+`powerpc-apple-macos/`). Retro68's host tools are linked against Boost;
+if they fail to start, set `RETRO68_BOOST_LIB` to the directory with those
+libraries. `build-mac.sh clean` removes `build-mac/`.
+
+Outputs in `build-mac/`:
+
+| File | Contents | Runs on |
+|---|---|---|
+| `UnixBench.bin` | **fat application**: 68020+FPU `CODE` resources plus a PowerPC code fragment | 68020/68030/68040 Macs with an FPU; every PowerPC Mac |
+| `UnixBench-68k.bin` | 68020 with 68881/68882 (or 68040 FPU) code, `-m68020 -m68881` | same 68k Macs |
+| `UnixBench-68k-nofpu.bin` | 68000 code, software floating point | every 68k Mac from the Plus up, including 68LC040 models, and the 68k emulator of PowerPC Macs |
+| `UnixBench-PPC.bin` | PowerPC only | every PowerPC Mac |
+| `UnixBench.dsk` | 1440K HFS floppy image with all four applications | emulators (Basilisk II, SheepShaver, Mini vMac), or written to a floppy for a real Mac |
+| `UnixBench.hda` | 4 MB Apple Partition Map SCSI disk with the same files (needs [rb-cli](https://github.com/danifunker/rusty-backup)) | QEMU `q800` as a second SCSI disk, the MiSTer Quadra 800 core's disk slots, BlueSCSI |
+
+Ready-built copies of all of these are in `release/`.
+
+The `.bin` files are MacBinary II. StuffIt Expander or BinHex opens them
+on the Mac; on the host, `hcopy -m` (hfsutils) writes them into an HFS
+image with both forks and the Finder info, which is how the `.dsk` image
+is made. On a 68k Mac the Process Manager runs the fat application's
+`CODE` resources; a PowerPC Mac prefers the code fragment named by the
+`cfrg` resource. The applications are small: 75 KB (68k), 102 KB (no
+FPU, because of the software floating point), 117 KB (PowerPC) and
+192 KB (fat).
+
+**Running.** Double-click the application. There is no command line, so
+the console window first asks for options, which are the same as on the
+other platforms (`-q`, `-v`, `-i passes`, `-f`, test names); Return alone
+runs every test with the defaults. Everything printed is also written to
+`UnixBench Results` (a SimpleText file with Mac line endings) next to the
+application, or on the desktop of the startup disk if the application's
+volume is locked, e.g. a CD-ROM. At the end the window stays open until
+Return is pressed or its close box is clicked (Command-Q quits too). The
+Mac does nothing else while a pass runs: the window is not redrawn, the
+clock stops and the mouse is ignored until the pass ends.
+
+**Console.** `mac_console.c` is a small console of its own (a window of
+Monaco 9 cells, no scrollback, a line editor for input) hooked into
+Retro68's C library through `_consolewrite()` and `_consoleread()`.
+Retro68's RetroConsole library was tried first; it is C++, which made the
+application 550 KB on 68k and 1 MB on PowerPC, and it exposed a Retro68
+bug: with libstdc++ linked in, `ld -q` emits two `R_68K_32` relocations
+for one `.eh_frame` word, Elf2Mac (November 2025) encodes the zero
+distance between them as the 0 byte that ends its relocation list, and
+the start-up code then patches the wrong words (the FPU build died with an
+F-line error inside libstdc++ at launch; the no-FPU build survived by
+luck). Newer Elf2Mac stops with "Duplicate Relocation present" instead.
+Without C++ the relocation lists are clean.
+
+**Clock and alarm.**
+
+- The clock is `Microseconds()`, with `TickCount()` (60.15 Hz) on systems
+  without that trap (System 6). The 64-bit microsecond count is combined
+  in `double` arithmetic, so no 64-bit integer type is needed. The
+  `System:` line says which clock was used.
+- The alarm is a Time Manager task: `InsTime`, `PrimeTime(ms)`, `RmvTime`.
+  The task routine runs at interrupt time and only stores to the flag.
+  On 68k the Time Manager passes the task record in A1 and A5 may not
+  point to the application's globals, so the record is extended with the
+  flag pointer and the routine, declared with Retro68's
+  `#pragma parameter`, takes it from A1 and touches no global. (Retro68
+  does not address globals through A5 anyway: Elf2Mac emits absolute
+  addresses that the start-up code relocates. The routine is written to
+  be safe under either model.) On PowerPC the routine is reached through
+  a Mixed Mode routine descriptor. The Multiversal `TMTask` lacks the
+  revised Time Manager's two trailing fields, so `plat_mac.c` declares
+  the full 22-byte record.
+- At start-up a 50 ms test alarm is fired. If it never arrives, the
+  `System:` line says `ALARM FAILED` and each test stops at once instead
+  of spinning forever, like `plat_nt.c` does when it cannot start its
+  timer thread.
+- `plat_sysinfo` uses Gestalt (system version, CPU, FPU, RAM, machine
+  name, whether 68k code is being emulated) and falls back to
+  `SysEnvirons` on a System 6 without Gestalt.
+
+**CPU variants.** `-m68881` changes how the compiler returns `double`
+values, so the whole 68k binary, C library included, has to agree:
+`UB_CPUFLAGS` in `CMakeLists.txt` applies to every file, not just the
+kernels, and the link picks the matching Retro68 multilib. Retro68's
+console library exists only as a software-float build, which is fine
+because no floating-point value crosses into it. `plat_check_target`
+reads the compiler's macros: the FPU build reports `68k 68020+FPU` and
+refuses to run on a machine without an FPU, which includes the 68k
+emulator of a PowerPC Mac (it emulates a 68LC040); `-f` overrides the
+check. The FPU build uses the 68881 instruction set, so on a 68040 the
+transcendental instructions and `fmovecr` that GCC emits for `-ffast-math`
+are handled by the ROM's FPSP emulation; `UB_CPUFLAGS=-m68040` avoids
+most of them if that matters. The no-FPU build reports `68k generic` and runs anywhere, but when
+it runs under the PowerPC 68k emulator the `Build:` line warns that the
+scores are not native. The PowerPC build is generic (601-compatible) code.
+
+**Emulators.** The `.dsk` file is a bare HFS volume for Basilisk II,
+SheepShaver and Mini vMac. QEMU's `q800` machine and the MiSTer Quadra 800
+core want a SCSI disk instead, which is what `UnixBench.hda` is (an Apple
+Partition Map with an Apple driver partition); `qemu-system-ppc -M mac99`
+with Mac OS 9 can mount an HFS image as a CD-ROM (`-cdrom`). Scores from an
+emulator describe the host, not a Mac, and not even consistently: under
+QEMU's `q800` the 68020+FPU build scored several times lower than the
+no-FPU build on Dhrystone and Hanoi with equivalent code and no extra
+exceptions logged, presumably a translation artifact. What to check in an
+emulator is that the `System:` and `Build:` lines are right, that `-v`
+shows each pass ending at the requested time, and that `UnixBench Results`
+appears.
 
 ## Not ported
 

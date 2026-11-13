@@ -8,18 +8,18 @@
  *      plat_nt.c   Windows NT 3.51 / 4.0 and later (x86, PowerPC, MIPS,
  *                  Alpha, x64) - Win32 API only
  *      plat_dos.c  MS-DOS, 32-bit DPMI via DJGPP (386 and later)
+ *      plat_mac.c  classic Mac OS, System 6 to 9, 68k and PowerPC (Retro68)
  *      plat_psx.c  POSIX hosts, used to cross-check scores against the
  *                  regular UnixBench binaries
  *
- *  A classic Mac OS layer is planned.  The interface is shaped around what
- *  that target can do:
+ *  The interface is shaped around what classic Mac OS can do:
  *
- *    - No preemptive threads and no signals.  The stop timer will be a Time
+ *    - No preemptive threads and no signals.  The stop timer is a Time
  *      Manager task, which runs at interrupt time and may only store to
  *      memory.  So plat_alarm_start() only ever sets an int flag; it must
  *      never call stdio, malloc or exit.
- *    - No command line.  plat_init() may replace argc/argv (e.g. with
- *      CodeWarrior's ccommand()) before the runner parses them.
+ *    - No command line.  plat_init() may replace argc/argv (plat_mac.c
+ *      asks for options on the console) before the runner parses them.
  *    - 68k compilers may use 16-bit int.  Counters are unsigned long and
  *      no interface here relies on int being wider than 16 bits.
  ******************************************************************************/
