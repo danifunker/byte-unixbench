@@ -5,3 +5,4 @@ ubench
 obj/
 obj-*/
 build-mac/
+/ubench-sparc-*

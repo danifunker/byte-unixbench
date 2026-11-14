@@ -3,7 +3,8 @@
 A single-executable build of UnixBench's CPU tests for systems that can't
 run the regular Perl/`make`/`fork` harness: **Windows NT** (the first
 target was NT 4.0 on PowerPC), **MS-DOS** and **classic Mac OS** (68k and
-PowerPC).
+PowerPC). There is also a static build for **NetBSD/sparc**, for machines
+where one binary is handier than the full suite.
 
 | Test | Source | Indexed | Baseline |
 |---|---|---|---|
@@ -82,6 +83,61 @@ DJGPP users on DOS can run `make -f Makefile.dos` directly.
   check the CPU (family via CPUID or the EFLAGS AC/ID bits, plus CMOV for
   686) and refuse to run on an older one unless you pass `-f`.
 
+## Building for SPARC (NetBSD)
+
+`build-sparc.sh` cross-compiles for 32-bit SPARC in Docker with Debian
+bookworm's `sparc64-linux-gnu-gcc` (GCC 12.2, binutils 2.40) and `-m32`.
+The first run downloads the NetBSD 11.0 `sparc` sets `base.tgz` and
+`comp.tgz` (190 MB) and keeps their headers and libraries in the
+`sparc-netbsd-cross` volume.
+
+```
+./build-sparc.sh            # all three binaries
+./build-sparc.sh netbsd     # only the NetBSD ones
+./build-sparc.sh linux      # only the Linux one
+```
+
+| Binary | Runs on | Kernels compiled with |
+|---|---|---|
+| `ubench-sparc-netbsd` | NetBSD/sparc on any 32-bit SPARC | `-mcpu=v7` |
+| `ubench-sparc-netbsd-v8` | NetBSD/sparc on SPARC V8: SuperSPARC, microSPARC, hyperSPARC and later | `-mcpu=supersparc` |
+| `ubench-sparc-linux` | Linux with a 32-bit SPARC userland, on a V9 CPU; `qemu-sparc32plus` | `-mcpu=v7` |
+
+Ready-built copies of the two NetBSD binaries are in `release/`. They are
+static, so they need nothing but the kernel: copy one over and run it.
+
+- **Toolchain:** the compiler targets Linux. For NetBSD it is used with
+  `-nostdinc` and NetBSD's headers, the Linux predefines swapped for
+  `__NetBSD__`, and a hand-written link line: NetBSD's `crt0.o`, `crti.o`,
+  `crtbeginT.o`, `libm.a`, `libc.a`, `libgcc.a`, `crtend.o` and `crtn.o`,
+  nothing from Debian. The NetBSD ident note comes from `crti.o`. Both
+  binaries were run on NetBSD 11.0 on a SPARCstation 20 (the MiSTer core,
+  SuperSPARC at 55 MHz).
+- **Generic build:** V7 has no multiply or divide instruction, so the
+  compiler calls `.umul`, `.div` and friends in NetBSD's libc, which is
+  V7 code itself: the whole static binary has no `umul`, `smul`, `udiv` or
+  `sdiv` in it.
+- **V8 build:** works like the DOS variants. Only the kernels are V8 code
+  (`smul` and `sdiv` in Dhrystone, Whetstone and the integer arith tests);
+  the runner, the platform layer and libc stay V7. The binary asks the
+  kernel for `machdep.cpu_arch` and refuses to run on a V7 CPU unless you
+  pass `-f`.
+- **Timing and alarm:** `gettimeofday()` and `alarm()`, as on every POSIX
+  host (`plat_psx.c`). The `System:` line shows `uname`, and on NetBSD
+  `hw.model` and the SPARC version too.
+- **Optimization:** `-O3 -ffast-math`, arith at `-O0`, as for MS-DOS.
+- **Linux binary:** only there to test the build under QEMU. Debian's
+  32-bit SPARC libc is V9 code, so the static binary is a V8+ executable
+  (`EM_SPARC32PLUS`): it needs `qemu-sparc32plus`, not `qemu-sparc`, and
+  does not run on a real 32-bit SPARC. Its kernels are the same V7 code
+  as in the generic NetBSD binary. `make -f Makefile.sparc
+  ubench-sparc-linux-v8` builds one with the V8 kernels. Under
+  `qemu-sparc32plus` 8.2 some Dhrystone passes end in "wrong answer": when
+  the alarm signal lands inside glibc's V9 `strcpy` or `strcmp`, the
+  interrupted call returns garbage (a loop of those two calls under a 1 ms
+  timer went wrong on about half the signals; a loop of multiplies and
+  divides never did). The NetBSD binaries contain no V9 code.
+
 ## CPU-specific builds
 
 `ubench.exe` is the **generic** build. It uses no CPU-specific options, so
@@ -158,7 +214,7 @@ plat_nt.c       Win32 implementation
 plat_dos.c      MS-DOS (DJGPP) implementation
 plat_mac.c      classic Mac OS (Retro68) implementation
 mac_console.c   classic Mac OS console window (stdout/stdin)
-plat_psx.c      POSIX implementation, for cross-checking scores
+plat_psx.c      POSIX implementation: NetBSD/sparc, and cross-checking scores
 ubench.c/.h     runner: test table, passes, scoring, index, report
 t_dhry.c        Dhrystone main loop + Proc_1..Proc_5 (from dhry_1.c)
 t_whets.c       wraps src/whets.c unchanged
@@ -167,9 +223,11 @@ t_hanoi.c       Tower of Hanoi
 Makefile.nt     NMAKE, for Visual C++ 4.x and later
 Makefile.dos    GNU make, for DJGPP (native or cross)
 Makefile.posix  for comparing against the stock binaries
+Makefile.sparc  GNU make, 32-bit SPARC cross build (NetBSD, Linux)
 CMakeLists.txt  classic Mac OS, for Retro68's CMake toolchain files
 build-mac.sh    runs CMake for each Mac CPU and makes the fat application
 build-dos.sh    DJGPP cross build in Docker
+build-sparc.sh  SPARC cross build in Docker
 build-pint.sh   NT 4.0 on ARM (PINT) cross build in Docker
 ```
 

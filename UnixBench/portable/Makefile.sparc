@@ -1,0 +1,105 @@
+# UnixBench portable harness - GNU make makefile for 32-bit SPARC
+#
+#   make -f Makefile.sparc SYSROOT=/path/to/netbsd-sparc    NetBSD binaries
+#   make -f Makefile.sparc ubench-sparc-linux               Linux/sparc32
+#   make -f Makefile.sparc clean
+#
+# A cross build with a Linux-targeted GCC (build-sparc.sh uses Debian's
+# sparc64-linux-gnu-gcc with -m32).  The NetBSD binaries are compiled against
+# the headers of a NetBSD/sparc sysroot (usr/include and usr/lib from the
+# base and comp sets) and linked by hand against its crt files, libc, libm
+# and libgcc, so nothing of the compiler's own Linux runtime gets in.
+#
+#   ubench-sparc-netbsd       generic: -mcpu=v7, every 32-bit SPARC
+#   ubench-sparc-netbsd-v8    kernels -mcpu=supersparc (hardware mul/div)
+#   ubench-sparc-linux        static Linux/sparc32, for testing under qemu
+#   ubench-sparc-linux-v8     the same with the v8 kernels (not in "all")
+
+CC      = sparc64-linux-gnu-gcc
+SYSROOT =
+
+# OPTON matches the UnixBench Makefile's default so scores are comparable.
+# If you change it, quote it along with any results.
+OPTON   = -O3 -ffast-math
+CFLAGS  = -m32 -std=c89 -pedantic -Wall -Wdeclaration-after-statement \
+          -fno-pie $(OPTON)
+
+# dumb_stuff() in the arith tests ignores its input, so gcc computes it at
+# compile time and measures nothing.  As Makefile.dos does, build arith
+# unoptimized.  Quote this along with any arith results.
+ARITHFLAGS = -O0
+
+DHRYFLAGS = -DTIME -DREG=register
+SRC       = ../src
+
+# Code-generation flags.  Only the benchmark kernels get the v8 flags; the
+# runner and platform layer stay v7, so the v8 binary can start on a v7 CPU
+# and say so.
+GENERICFLAGS = -mcpu=v7
+V8FLAGS      = -mcpu=supersparc
+
+# NetBSD: its headers instead of the compiler's Linux ones, and its
+# predefined macros instead of the Linux ones.
+NBINC  = $(shell $(CC) -m32 -print-file-name=include)
+NBCPP  = -nostdinc -isystem $(NBINC) -isystem $(SYSROOT)/usr/include \
+         -U__linux__ -U__linux -Ulinux -U__gnu_linux__ -D__NetBSD__
+NBLIB  = $(SYSROOT)/usr/lib
+NBLINK = -m32 -static -nostdlib -Wl,--build-id=none -Wl,-z,noexecstack -Wl,-S
+NBHEAD = $(NBLIB)/crt0.o $(NBLIB)/crti.o $(NBLIB)/crtbeginT.o
+NBTAIL = -Wl,--start-group $(NBLIB)/libm.a $(NBLIB)/libc.a $(NBLIB)/libgcc.a \
+         -Wl,--end-group $(NBLIB)/crtend.o $(NBLIB)/crtn.o
+
+HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
+OBJS = ubench.o plat_psx.o t_dhry.o dhry_2.o t_whets.o t_arith.o t_hanoi.o
+
+NBEXES = ubench-sparc-netbsd ubench-sparc-netbsd-v8
+LXEXES = ubench-sparc-linux ubench-sparc-linux-v8
+OBJDIRS = obj-sparc-nb obj-sparc-nb-v8 obj-sparc-lx obj-sparc-lx-v8
+
+all: $(NBEXES)
+
+# $(call compile,objdir,cpuflags,targetdef,cppflags)
+define compile
+$(1):
+	mkdir -p $(1)
+$(1)/ubench.o: ubench.c $(HDRS) | $(1)
+	$$(CC) $$(CFLAGS) $$(GENERICFLAGS) $(4) -c ubench.c -o $$@
+$(1)/plat_psx.o: plat_psx.c plat.h | $(1)
+	$$(CC) $$(CFLAGS) $$(GENERICFLAGS) $(4) $(3) -c plat_psx.c -o $$@
+$(1)/t_dhry.o: t_dhry.c $(HDRS) | $(1)
+	$$(CC) $$(CFLAGS) $(2) $(4) $$(DHRYFLAGS) -c t_dhry.c -o $$@
+$(1)/dhry_2.o: $$(SRC)/dhry_2.c $(HDRS) | $(1)
+	$$(CC) $$(CFLAGS) $(2) $(4) $$(DHRYFLAGS) -c $$(SRC)/dhry_2.c -o $$@
+$(1)/t_whets.o: t_whets.c $$(SRC)/whets.c $(HDRS) | $(1)
+	$$(CC) $$(CFLAGS) $(2) $(4) -c t_whets.c -o $$@
+$(1)/t_arith.o: t_arith.c $(HDRS) | $(1)
+	$$(CC) $$(CFLAGS) $(2) $(4) $$(ARITHFLAGS) -c t_arith.c -o $$@
+$(1)/t_hanoi.o: t_hanoi.c $(HDRS) | $(1)
+	$$(CC) $$(CFLAGS) $(2) $(4) -c t_hanoi.c -o $$@
+endef
+
+# $(call netbsd,exe,objdir,cpuflags,targetdef)
+define netbsd
+$(call compile,$(2),$(3),$(4),$$(NBCPP))
+$(1): $(addprefix $(2)/,$(OBJS))
+	@test -f "$$(NBLIB)/crt0.o" || \
+	    { echo "set SYSROOT to a NetBSD/sparc sysroot"; exit 1; }
+	$$(CC) $$(NBLINK) -o $$@ $$(NBHEAD) $$^ $$(NBTAIL)
+endef
+
+# $(call linux,exe,objdir,cpuflags,targetdef)
+define linux
+$(call compile,$(2),$(3),$(4),)
+$(1): $(addprefix $(2)/,$(OBJS))
+	$$(CC) -m32 $$(GENERICFLAGS) -static -no-pie -o $$@ $$^ -lm
+endef
+
+$(eval $(call netbsd,ubench-sparc-netbsd,obj-sparc-nb,$(GENERICFLAGS),))
+$(eval $(call netbsd,ubench-sparc-netbsd-v8,obj-sparc-nb-v8,$(V8FLAGS),-DUB_TARGET_SPARCV8))
+$(eval $(call linux,ubench-sparc-linux,obj-sparc-lx,$(GENERICFLAGS),))
+$(eval $(call linux,ubench-sparc-linux-v8,obj-sparc-lx-v8,$(V8FLAGS),-DUB_TARGET_SPARCV8))
+
+clean:
+	rm -rf $(OBJDIRS) $(NBEXES) $(LXEXES)
+
+.PHONY: all clean

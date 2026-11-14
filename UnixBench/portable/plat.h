@@ -9,8 +9,9 @@
  *                  Alpha, x64) - Win32 API only
  *      plat_dos.c  MS-DOS, 32-bit DPMI via DJGPP (386 and later)
  *      plat_mac.c  classic Mac OS, System 6 to 9, 68k and PowerPC (Retro68)
- *      plat_psx.c  POSIX hosts, used to cross-check scores against the
- *                  regular UnixBench binaries
+ *      plat_psx.c  POSIX: NetBSD/sparc (Makefile.sparc), and any host to
+ *                  cross-check scores against the regular UnixBench
+ *                  binaries
  *
  *  The interface is shaped around what classic Mac OS can do:
  *
