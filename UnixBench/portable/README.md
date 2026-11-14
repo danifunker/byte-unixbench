@@ -3,8 +3,9 @@
 A single-executable build of UnixBench's CPU tests for systems that can't
 run the regular Perl/`make`/`fork` harness: **Windows NT** (the first
 target was NT 4.0 on PowerPC), **MS-DOS** and **classic Mac OS** (68k and
-PowerPC). There is also a static build for **NetBSD/sparc**, for machines
-where one binary is handier than the full suite.
+PowerPC). There are also builds for **NetBSD/sparc** (static) and
+**Solaris 8/sparc**, for machines where one binary is handier than the
+full suite.
 
 | Test | Source | Indexed | Baseline |
 |---|---|---|---|
@@ -138,6 +139,48 @@ static, so they need nothing but the kernel: copy one over and run it.
   timer went wrong on about half the signals; a loop of multiplies and
   divides never did). The NetBSD binaries contain no V9 code.
 
+## Building for SPARC (Solaris 8)
+
+`build-solaris.sh` makes the same two flavours for Solaris 8 (SunOS 5.8)
+on 32-bit SPARC, with the same compiler and flags as the NetBSD build.
+Solaris cannot be downloaded, so the script takes a tar of the headers and
+libraries of an installed system (its header says which files, 10 MB):
+
+```
+./build-solaris.sh /path/to/sol8-sysroot.tar
+```
+
+| Binary | Runs on | Kernels compiled with |
+|---|---|---|
+| `ubench-sparc-solaris` | Solaris 8 on any 32-bit SPARC | `-mcpu=v7` |
+| `ubench-sparc-solaris-v8` | Solaris 8 on SPARC V8 | `-mcpu=supersparc` |
+
+Ready-built copies are in `release/`. Unlike the NetBSD ones they are
+dynamic: 33 KB each, needing `/usr/lib/libc.so.1` and `libm.so.1`, which
+every Solaris installation has.
+
+- **Sun's libraries do the library work.** Dhrystone's `strcmp`, `strcpy`
+  and `memcpy`, Whetstone's `sin`, `cos`, `atan`, `exp` and `log`, and the
+  V7 code's `.umul`, `.div` and `.udiv` are all imported from Solaris's
+  `libc.so.1` and `libm.so.1` at run time, as they were for the binaries
+  behind the 1994 baseline. Nothing from Debian or libgcc is linked in.
+- **Toolchain:** as for NetBSD, `-nostdinc` with Solaris's headers and
+  `__sun`, `__SVR4` and `__sparc` in place of the Linux predefines. GNU ld
+  links with `--hash-style=sysv` and `/usr/lib/ld.so.1` as the interpreter.
+- **Start-up code:** Solaris 8 has no `crt1.o`; it came with the compiler.
+  `crt1-solaris.S` is a small one of our own (argc, argv, `environ`, the
+  run-time linker's exit handler, `main`, `exit`).
+- **`sincos`:** GCC merges Whetstone's `sin(x)` and `cos(x)` into one call
+  to `sincos()`, which Solaris 8's libm lacks. `sincos-solaris.c` supplies
+  it as a call to Solaris's `sin` and one to its `cos`. The NetBSD binaries
+  call NetBSD's real `sincos`, so Whetstone's trigonometric sections do
+  slightly different library work on the two systems.
+- **V8 build:** checks `sysinfo(SI_ISALIST)` for `sparcv8` and refuses to
+  run on a V7 CPU unless you pass `-f`. The `System:` line shows `uname`,
+  `sysinfo(SI_PLATFORM)` and the SPARC version.
+- Both binaries were run on Solaris 8 2/04 under `qemu-system-sparc -M
+  SS-20`, not yet on real hardware.
+
 ## CPU-specific builds
 
 `ubench.exe` is the **generic** build. It uses no CPU-specific options, so
@@ -214,7 +257,8 @@ plat_nt.c       Win32 implementation
 plat_dos.c      MS-DOS (DJGPP) implementation
 plat_mac.c      classic Mac OS (Retro68) implementation
 mac_console.c   classic Mac OS console window (stdout/stdin)
-plat_psx.c      POSIX implementation: NetBSD/sparc, and cross-checking scores
+plat_psx.c      POSIX implementation: NetBSD/sparc, Solaris/sparc, and
+                cross-checking scores
 ubench.c/.h     runner: test table, passes, scoring, index, report
 t_dhry.c        Dhrystone main loop + Proc_1..Proc_5 (from dhry_1.c)
 t_whets.c       wraps src/whets.c unchanged
@@ -223,11 +267,14 @@ t_hanoi.c       Tower of Hanoi
 Makefile.nt     NMAKE, for Visual C++ 4.x and later
 Makefile.dos    GNU make, for DJGPP (native or cross)
 Makefile.posix  for comparing against the stock binaries
-Makefile.sparc  GNU make, 32-bit SPARC cross build (NetBSD, Linux)
+Makefile.sparc  GNU make, 32-bit SPARC cross build (NetBSD, Solaris, Linux)
+crt1-solaris.S  program start for the Solaris binaries
+sincos-solaris.c  sincos() for Solaris 8, from its sin() and cos()
 CMakeLists.txt  classic Mac OS, for Retro68's CMake toolchain files
 build-mac.sh    runs CMake for each Mac CPU and makes the fat application
 build-dos.sh    DJGPP cross build in Docker
 build-sparc.sh  SPARC cross build in Docker
+build-solaris.sh  Solaris 8 SPARC cross build in Docker
 build-pint.sh   NT 4.0 on ARM (PINT) cross build in Docker
 ```
 

@@ -4,7 +4,7 @@
  *  Two uses.  On a current host it lets the harness run next to the regular
  *  UnixBench binaries to check the scores agree (Makefile.posix).  On Unix
  *  systems that cannot run the regular harness comfortably it is the real
- *  thing: Makefile.sparc builds it for NetBSD/sparc.
+ *  thing: Makefile.sparc builds it for NetBSD/sparc and Solaris/sparc.
  *
  *  Plain C89 like the rest: no long long, and nothing wider than long is
  *  passed to printf (time_t is 64 bits on NetBSD, 32-bit ports included).
@@ -29,6 +29,10 @@
 #ifdef __NetBSD__
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#endif
+#if defined(__sun) && defined(__SVR4)
+#include <sys/systeminfo.h>
+#define UB_SOLARIS 1
 #endif
 #include "plat.h"
 
@@ -96,6 +100,21 @@ static int plat_sparc_arch(void)
     if (sysctl(mib, 2, &arch, &n, NULL, 0) == 0 && n == sizeof(arch))
         return arch;
 #endif
+#if defined(UB_SOLARIS) && defined(__sparc__) && defined(SI_ISALIST)
+    /* Solaris 2.6 and later: the instruction sets the CPU runs natively,
+       best first, e.g. "sparcv8 sparcv8-fsmuld sparcv7 sparc". */
+    char isa[256];
+    long n = sysinfo(SI_ISALIST, isa, sizeof(isa));
+
+    if (n > 0 && n <= (long)sizeof(isa)) {
+        if (strstr(isa, "sparcv9") != NULL)
+            return 9;
+        if (strstr(isa, "sparcv8") != NULL)
+            return 8;
+        if (strstr(isa, "sparcv7") != NULL)
+            return 7;
+    }
+#endif
     return 0;
 }
 
@@ -140,7 +159,7 @@ void plat_sysinfo(char *buf, int len)
              + sizeof(model) + 64];
     int arch = plat_sparc_arch();
 
-    if (uname(&u) != 0) {
+    if (uname(&u) < 0) {            /* success is 0, on Solaris 1 */
         strncpy(buf, "unknown POSIX system", len - 1);
         buf[len - 1] = '\0';
         return;
@@ -159,6 +178,15 @@ void plat_sysinfo(char *buf, int len)
             model[n] = '\0';
             sprintf(tmp + strlen(tmp), "; %s", model);
         }
+    }
+#endif
+#if defined(UB_SOLARIS) && defined(SI_PLATFORM)
+    {
+        /* e.g. "SUNW,SPARCstation-20" */
+        long n = sysinfo(SI_PLATFORM, model, sizeof(model));
+
+        if (n > 1 && n <= (long)sizeof(model))
+            sprintf(tmp + strlen(tmp), "; %s", model);
     }
 #endif
     if (arch != 0)

@@ -2,6 +2,7 @@
 #
 #   make -f Makefile.sparc SYSROOT=/path/to/netbsd-sparc    NetBSD binaries
 #   make -f Makefile.sparc ubench-sparc-linux               Linux/sparc32
+#   make -f Makefile.sparc solaris SOLSYSROOT=/path/to/solaris-sparc
 #   make -f Makefile.sparc clean
 #
 # A cross build with a Linux-targeted GCC (build-sparc.sh uses Debian's
@@ -14,6 +15,15 @@
 #   ubench-sparc-netbsd-v8    kernels -mcpu=supersparc (hardware mul/div)
 #   ubench-sparc-linux        static Linux/sparc32, for testing under qemu
 #   ubench-sparc-linux-v8     the same with the v8 kernels (not in "all")
+#
+# The Solaris binaries ("solaris", not in "all") are compiled the same way
+# against the headers of a Solaris 8 system (usr/include) and linked
+# dynamically against its libc.so.1 and libm.so.1 (usr/lib), with our own
+# crt1 (crt1-solaris.S): Solaris 8 has no crt1.o of its own, and its libc
+# and libm are meant to be used as shared libraries.
+#
+#   ubench-sparc-solaris      generic: -mcpu=v7
+#   ubench-sparc-solaris-v8   kernels -mcpu=supersparc
 
 CC      = sparc64-linux-gnu-gcc
 SYSROOT =
@@ -49,14 +59,33 @@ NBHEAD = $(NBLIB)/crt0.o $(NBLIB)/crti.o $(NBLIB)/crtbeginT.o
 NBTAIL = -Wl,--start-group $(NBLIB)/libm.a $(NBLIB)/libc.a $(NBLIB)/libgcc.a \
          -Wl,--end-group $(NBLIB)/crtend.o $(NBLIB)/crtn.o
 
+# Solaris: the same idea, but a dynamic link.  The mul/div routines of the
+# V7 code (.umul, .div ...) come from libc.so.1, so there is no libgcc.
+# Solaris's run-time linker wants a SysV hash table.  sincos-solaris.c is
+# the one libm function the compiler assumes and Solaris 8 lacks.
+SOLSYSROOT =
+SOLCPP  = -nostdinc -isystem $(NBINC) -isystem $(SOLSYSROOT)/usr/include \
+          -U__linux__ -U__linux -Ulinux -U__gnu_linux__ \
+          -D__sun -D__sun__ -D__SVR4 -D__svr4__ -D__sparc
+SOLLIB  = $(SOLSYSROOT)/usr/lib
+SOLLINK = -m32 -no-pie -nostdlib -Wl,--build-id=none -Wl,-z,noexecstack \
+          -Wl,-S \
+          -Wl,--hash-style=sysv -Wl,--dynamic-linker=/usr/lib/ld.so.1 \
+          -Wl,-z,norelro -Wl,--no-eh-frame-hdr
+SOLTAIL = $(SOLLIB)/values-Xa.o -L$(SOLLIB) -Wl,-rpath-link,$(SOLLIB) -lm -lc
+
 HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
 OBJS = ubench.o plat_psx.o t_dhry.o dhry_2.o t_whets.o t_arith.o t_hanoi.o
 
 NBEXES = ubench-sparc-netbsd ubench-sparc-netbsd-v8
 LXEXES = ubench-sparc-linux ubench-sparc-linux-v8
-OBJDIRS = obj-sparc-nb obj-sparc-nb-v8 obj-sparc-lx obj-sparc-lx-v8
+SOLEXES = ubench-sparc-solaris ubench-sparc-solaris-v8
+OBJDIRS = obj-sparc-nb obj-sparc-nb-v8 obj-sparc-lx obj-sparc-lx-v8 \
+          obj-sparc-sol obj-sparc-sol-v8
 
 all: $(NBEXES)
+
+solaris: $(SOLEXES)
 
 # $(call compile,objdir,cpuflags,targetdef,cppflags)
 define compile
@@ -94,12 +123,27 @@ $(1): $(addprefix $(2)/,$(OBJS))
 	$$(CC) -m32 $$(GENERICFLAGS) -static -no-pie -o $$@ $$^ -lm
 endef
 
+# $(call solaris,exe,objdir,cpuflags,targetdef)
+define solaris
+$(call compile,$(2),$(3),$(4),$$(SOLCPP))
+$(2)/crt1.o: crt1-solaris.S | $(2)
+	$$(CC) -m32 -fno-pie $$(GENERICFLAGS) -c crt1-solaris.S -o $$@
+$(2)/sincos.o: sincos-solaris.c | $(2)
+	$$(CC) $$(CFLAGS) $(3) $$(SOLCPP) -fno-builtin -c sincos-solaris.c -o $$@
+$(1): $(2)/crt1.o $(addprefix $(2)/,$(OBJS)) $(2)/sincos.o
+	@test -f "$$(SOLLIB)/libc.so.1" || \
+	    { echo "set SOLSYSROOT to a Solaris/sparc sysroot"; exit 1; }
+	$$(CC) $$(SOLLINK) -o $$@ $$^ $$(SOLTAIL)
+endef
+
 $(eval $(call netbsd,ubench-sparc-netbsd,obj-sparc-nb,$(GENERICFLAGS),))
 $(eval $(call netbsd,ubench-sparc-netbsd-v8,obj-sparc-nb-v8,$(V8FLAGS),-DUB_TARGET_SPARCV8))
 $(eval $(call linux,ubench-sparc-linux,obj-sparc-lx,$(GENERICFLAGS),))
 $(eval $(call linux,ubench-sparc-linux-v8,obj-sparc-lx-v8,$(V8FLAGS),-DUB_TARGET_SPARCV8))
+$(eval $(call solaris,ubench-sparc-solaris,obj-sparc-sol,$(GENERICFLAGS),))
+$(eval $(call solaris,ubench-sparc-solaris-v8,obj-sparc-sol-v8,$(V8FLAGS),-DUB_TARGET_SPARCV8))
 
 clean:
-	rm -rf $(OBJDIRS) $(NBEXES) $(LXEXES)
+	rm -rf $(OBJDIRS) $(NBEXES) $(LXEXES) $(SOLEXES)
 
-.PHONY: all clean
+.PHONY: all solaris clean
