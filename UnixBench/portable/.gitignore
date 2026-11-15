@@ -9,3 +9,5 @@ build-mac/
 ubench-r4k
 ubench-mips3
 ubench-mips4
+ubench-mips3-r5k
+ubench-mips4-default

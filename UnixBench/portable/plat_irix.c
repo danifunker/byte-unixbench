@@ -27,12 +27,22 @@
 #include "plat.h"
 
 /* CPU-specific builds are selected with -DUB_TARGET_<variant>.  The level
-   is the MIPS ISA the kernels were compiled for. */
+   is the MIPS ISA the kernels were compiled for.  -DUB_SCHED_<cpu> records
+   the instruction scheduling the kernels were tuned for (-r5000 etc.);
+   without it the compiler's default scheduling for the ISA was used. */
+#if defined(UB_SCHED_R5000)
+#define UB_SCHED        " -r5000"
+#elif defined(UB_SCHED_R10000)
+#define UB_SCHED        " -r10000"
+#else
+#define UB_SCHED        ""
+#endif
+
 #if defined(UB_TARGET_MIPS4)
-#define UB_TARGET_NAME  "MIPS IV (R5000 and later), n32 -mips4"
+#define UB_TARGET_NAME  "MIPS IV (R5000 and later), n32 -mips4" UB_SCHED
 #define UB_TARGET_ISA   4
 #elif defined(UB_TARGET_MIPS3)
-#define UB_TARGET_NAME  "MIPS III (R4000), n32 -mips3"
+#define UB_TARGET_NAME  "MIPS III (R4000), n32 -mips3" UB_SCHED
 #define UB_TARGET_ISA   3
 #elif defined(UB_TARGET_R4000)
 #define UB_TARGET_NAME  "MIPS II (R4000), -mips2"

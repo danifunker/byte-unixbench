@@ -10,6 +10,15 @@
 #   make -f Makefile.irix mips4       MIPS IV, R5000/R8000/R10000 and later:
 #                                     ubench-mips4
 #   make -f Makefile.irix n32         both
+#
+#   Scheduling variants, for comparing tuning on real hardware:
+#   make -f Makefile.irix mips3-r5k   MIPS III, scheduled for the R5000:
+#                                     ubench-mips3-r5k
+#   make -f Makefile.irix mips4-default
+#                                     MIPS IV with MIPSpro's default
+#                                     scheduling (no -r flag):
+#                                     ubench-mips4-default
+#   make -f Makefile.irix n32all      all four n32 builds
 #   make -f Makefile.irix O32ABI=-o32 all6
 #                                     all four (o32 builds on IRIX 6 need
 #                                     -o32, since n32 is the default there)
@@ -78,6 +87,13 @@ MIPS3CPU     = -mips3
 MIPS4CPU     = -mips4 -r5000
 N32NONSHARED =
 
+# The scheduling variants.  The *SCHED defines label the Build: line with
+# the scheduling used, so keep them in step if you change the CPU flags.
+MIPS3R5KCPU  = -mips3 -r5000
+MIPS4DEFCPU  = -mips4
+MIPS4SCHED   = -DUB_SCHED_R5000
+MIPS3R5KSCHED = -DUB_SCHED_R5000
+
 DHRYFLAGS = -DTIME -DREG=register
 SRC       = ../src
 
@@ -129,11 +145,23 @@ mips3:
 mips4:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips4 EXE=ubench-mips4 \
 	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
-	    CPUFLAGS="$(MIPS4CPU)" TARGETDEF=-DUB_TARGET_MIPS4 build
+	    CPUFLAGS="$(MIPS4CPU)" TARGETDEF="-DUB_TARGET_MIPS4 $(MIPS4SCHED)" build
+
+mips3-r5k:
+	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips3-r5k EXE=ubench-mips3-r5k \
+	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    CPUFLAGS="$(MIPS3R5KCPU)" TARGETDEF="-DUB_TARGET_MIPS3 $(MIPS3R5KSCHED)" build
+
+mips4-default:
+	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips4-default EXE=ubench-mips4-default \
+	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    CPUFLAGS="$(MIPS4DEFCPU)" TARGETDEF=-DUB_TARGET_MIPS4 build
 
 all: generic r4k
 
 n32: mips3 mips4
+
+n32all: mips3 mips4 mips3-r5k mips4-default
 
 all6: generic r4k mips3 mips4
 
@@ -167,5 +195,6 @@ $(O)/t_hanoi.o: t_hanoi.c $(HDRS)
 	$(CC) $(KFLAGS) -c t_hanoi.c -o $@
 
 clean:
-	rm -rf obj obj-r4k obj-mips3 obj-mips4 ubench ubench-r4k ubench-mips3 \
-	    ubench-mips4
+	rm -rf obj obj-r4k obj-mips3 obj-mips4 obj-mips3-r5k obj-mips4-default \
+	    ubench ubench-r4k ubench-mips3 ubench-mips4 ubench-mips3-r5k \
+	    ubench-mips4-default

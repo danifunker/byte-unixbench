@@ -236,6 +236,20 @@ make -f Makefile.irix n32
 |---|---|---|---|
 | `mips3` | `ubench-mips3` | `-n32 -mips3` | R4000/R4400/R4600/R4700 and later |
 | `mips4` | `ubench-mips4` | `-n32 -mips4 -r5000` | R5000, R8000, R10000, R12000 |
+| `mips3-r5k` | `ubench-mips3-r5k` | `-n32 -mips3 -r5000` | R4000 and later |
+| `mips4-default` | `ubench-mips4-default` | `-n32 -mips4` | R5000, R8000, R10000, R12000 |
+
+`mips3` and `mips4` are the main builds. The other two only change instruction
+scheduling, for comparing tuning on real hardware: `mips3-r5k` adds R5000
+scheduling to MIPS III code, and `mips4-default` leaves MIPS IV scheduling to
+MIPSpro. `make -f Makefile.irix n32all` builds all four. The `Build:` line
+shows the ISA and any `-r` scheduling flag.
+
+With `-mips4`, MIPSpro does integer division on the FP unit: it converts
+to double, uses `div.d`, then truncates. With `-mips3` it uses the integer
+`div`. This makes the arith tests differ between the MIPS III and MIPS IV
+builds. On the IRIS emulator the MIPS IV int arith runs about 35% slower,
+because IRIS's FP conversions cost more than real hardware's.
 
 - **What n32 adds:** the full 64-bit integer registers, 32
   double-precision FP registers (o32 has 16), and 8 arguments passed in
@@ -256,9 +270,11 @@ make -f Makefile.irix n32
   binaries on the same machine, pass `O32ABI=-o32`;
   `make -f Makefile.irix O32ABI=-o32 all6` builds all four.
 
-Ready-built copies are in `release/` as `ubench-irix6-mips3` and
-`ubench-irix6-mips4`, built with MIPSpro 7.4 on IRIX 6.5.22 using the
-defaults above. So far they have only been run on an emulated R5000 Indy.
+Ready-built copies of all four are in `release/` as `ubench-irix6-mips3`,
+`ubench-irix6-mips4`, `ubench-irix6-mips3-r5k` and
+`ubench-irix6-mips4-default`, built with MIPSpro 7.4 on IRIX 6.5.22 using
+the defaults above. So far they have only been run on an emulated R5000
+Indy.
 
 ## CPU-specific builds
 
