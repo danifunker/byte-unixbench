@@ -181,6 +181,43 @@ every Solaris installation has.
 - Both binaries were run on Solaris 8 2/04 under `qemu-system-sparc -M
   SS-20`, not yet on real hardware.
 
+## Building for SGI IRIX 5.3 (MIPS)
+
+Build natively on the IRIX machine. Copy the whole `UnixBench`
+directory over, since the build reads `../src`. Then:
+
+```
+cd UnixBench/portable
+make -f Makefile.irix all
+./ubench-r4k
+```
+
+| Target | Binary | Flags for the kernels | Runs on |
+|---|---|---|---|
+| `generic` | `ubench` | `-mips1` | every IRIX 5.3 machine, R3000 included |
+| `r4k` | `ubench-r4k` | `-mips2` | R4000/R4400/R4600/R4700/R5000 and later |
+
+- **Compiler:** the defaults are for IDO 5.3 `cc`: `-xansi -O2 -Olimit
+  3000 -non_shared`. The header of `Makefile.irix` shows how to build
+  with gcc instead, which gives flags comparable to the stock UnixBench
+  build (`-O3 -ffast-math`).
+- **`-non_shared`:** IRIX 5 compiles PIC code by default, and PIC
+  calls are slow. `-non_shared` builds static, non-PIC code. It needs
+  the static libraries in `/usr/lib/nonshared`. If they aren't
+  installed, build with `NONSHARED=`.
+- **ISA:** IRIX 5.3 only has the 32-bit o32 ABI, so MIPS II is the
+  highest ISA you can build for. `-mips3` and `-mips4` need IRIX 6's
+  n32 or 64-bit ABI.
+- **CPU check:** the `System:` line shows the CPU chip, its revision and
+  its clock speed, taken from the hardware inventory as `hinv` reports it.
+  `ubench-r4k` refuses to run on an R2000/R3000 unless you pass `-f`.
+- **Timing:** `gettimeofday()`, and the alarm uses `alarm()`/SIGALRM.
+
+Ready-built copies are in `release/` as `ubench-irix` and `ubench-irix-r4k`
+(built with the defaults above on IRIX 5.3). They are static, linked
+`-non_shared`, so they need nothing installed: copy one over, `chmod +x`
+it and run it.
+
 ## CPU-specific builds
 
 `ubench.exe` is the **generic** build. It uses no CPU-specific options, so
@@ -259,6 +296,7 @@ plat_mac.c      classic Mac OS (Retro68) implementation
 mac_console.c   classic Mac OS console window (stdout/stdin)
 plat_psx.c      POSIX implementation: NetBSD/sparc, Solaris/sparc, and
                 cross-checking scores
+plat_irix.c     SGI IRIX implementation
 ubench.c/.h     runner: test table, passes, scoring, index, report
 t_dhry.c        Dhrystone main loop + Proc_1..Proc_5 (from dhry_1.c)
 t_whets.c       wraps src/whets.c unchanged
@@ -276,6 +314,7 @@ build-dos.sh    DJGPP cross build in Docker
 build-sparc.sh  SPARC cross build in Docker
 build-solaris.sh  Solaris 8 SPARC cross build in Docker
 build-pint.sh   NT 4.0 on ARM (PINT) cross build in Docker
+Makefile.irix   SVR4 make, for IRIX 5.3 (IDO cc or gcc)
 ```
 
 ## How it differs from the Unix build

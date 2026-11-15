@@ -6,3 +6,4 @@ obj/
 obj-*/
 build-mac/
 /ubench-sparc-*
+ubench-r4k

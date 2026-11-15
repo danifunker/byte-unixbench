@@ -12,6 +12,7 @@
  *      plat_psx.c  POSIX: NetBSD/sparc (Makefile.sparc), and any host to
  *                  cross-check scores against the regular UnixBench
  *                  binaries
+ *      plat_irix.c SGI IRIX 5.3 and later (MIPS, o32)
  *
  *  The interface is shaped around what classic Mac OS can do:
  *

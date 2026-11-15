@@ -1,0 +1,113 @@
+# UnixBench portable harness - makefile for SGI IRIX 5.3 (and later)
+#
+#   make -f Makefile.irix             generic MIPS I build: ubench
+#   make -f Makefile.irix r4k         MIPS II build for R4000 and later:
+#                                     ubench-r4k
+#   make -f Makefile.irix all         both
+#   make -f Makefile.irix clean
+#
+# Plain SVR4 make syntax, so IRIX's own /usr/bin/make (or smake) works;
+# GNU make is not needed.
+#
+# Defaults are for the IRIX Development Option (IDO) 5.3 cc.  For gcc, e.g.
+#
+#   make -f Makefile.irix CC=gcc CFLAGS="-O3 -ffast-math" NONSHARED= \
+#        R4KCPU="-mips2 -mcpu=r4000" r4k
+#
+# (gcc 3.x and later spell the tuning option -march=r4000.)  If you change
+# any flags, quote them along with any results.
+
+CC = cc
+
+# -O2 is IDO's global optimizer.  -Olimit raises the size above which uopt
+# gives up on a routine ("Olimit exceeded") and leaves it unoptimized;
+# Whetstone's main loop and Dhrystone's Proc_0 need it.  -O3 is not used:
+# in IDO it merges all files and can inline Dhrystone's procedures across
+# dhry_1/dhry_2, which the benchmark's rules forbid.
+CFLAGS = -xansi -O2 -Olimit 3000
+
+# IRIX 5 builds position-independent code for shared libraries by default.
+# Every call then reloads $gp and goes through $t9, which costs Dhrystone
+# noticeably.  -non_shared builds ordinary static code and links the static
+# libraries in /usr/lib/nonshared.  If those aren't installed, build with
+# NONSHARED= (and quote that with the results).
+NONSHARED = -non_shared
+
+LIBS = -lm
+
+# ISA flags.  IRIX 5.3 has only the 32-bit o32 ABI, so MIPS II is as far as
+# it goes (-mips3/-mips4 need the n32 or 64-bit ABI of IRIX 6).  MIPS II
+# adds branch-likely, sqrt.d, trunc.w.d/round.w.d (double-to-int without
+# changing the FP rounding mode), ll/sc and loads without delay slots.
+GENERICCPU = -mips1
+R4KCPU     = -mips2
+
+DHRYFLAGS = -DTIME -DREG=register
+SRC       = ../src
+
+# Set by the generic and r4k targets.  Only the benchmark kernels get
+# CPUFLAGS; the runner and platform layer stay MIPS I so a MIPS II build on
+# an R3000 can report that instead of dying with an illegal instruction.
+O         = obj
+EXE       = ubench
+CPUFLAGS  = $(GENERICCPU)
+TARGETDEF =
+
+BFLAGS = $(CFLAGS) $(NONSHARED) $(GENERICCPU)
+KFLAGS = $(CFLAGS) $(NONSHARED) $(CPUFLAGS)
+
+# dumb_stuff() in the arith tests ignores its input.  gcc at -O1 and above
+# computes it at compile time and measures nothing (Makefile.dos uses -O0);
+# IDO -O2 does not inline, so the call and its divides stay.  For gcc, set
+# ARITHFLAGS=-O0.  Quote it along with any arith results.
+ARITHFLAGS =
+
+HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
+
+OBJS = $(O)/ubench.o $(O)/plat_irix.o $(O)/t_dhry.o $(O)/dhry_2.o \
+       $(O)/t_whets.o $(O)/t_arith.o $(O)/t_hanoi.o
+
+PASS = CC="$(CC)" CFLAGS="$(CFLAGS)" NONSHARED="$(NONSHARED)" \
+       LIBS="$(LIBS)" ARITHFLAGS="$(ARITHFLAGS)" GENERICCPU="$(GENERICCPU)"
+
+generic:
+	$(MAKE) -f Makefile.irix $(PASS) O=obj EXE=ubench \
+	    CPUFLAGS="$(GENERICCPU)" TARGETDEF= build
+
+r4k:
+	$(MAKE) -f Makefile.irix $(PASS) O=obj-r4k EXE=ubench-r4k \
+	    CPUFLAGS="$(R4KCPU)" TARGETDEF=-DUB_TARGET_R4000 build
+
+all: generic r4k
+
+build: $(O) $(EXE)
+
+$(O):
+	mkdir $(O)
+
+$(EXE): $(OBJS)
+	$(CC) $(NONSHARED) $(CPUFLAGS) -o $(EXE) $(OBJS) $(LIBS)
+
+$(O)/ubench.o: ubench.c $(HDRS)
+	$(CC) $(BFLAGS) -c ubench.c -o $@
+
+$(O)/plat_irix.o: plat_irix.c plat.h
+	$(CC) $(BFLAGS) $(TARGETDEF) -c plat_irix.c -o $@
+
+$(O)/t_dhry.o: t_dhry.c $(HDRS)
+	$(CC) $(KFLAGS) $(DHRYFLAGS) -c t_dhry.c -o $@
+
+$(O)/dhry_2.o: $(SRC)/dhry_2.c $(HDRS)
+	$(CC) $(KFLAGS) $(DHRYFLAGS) -c $(SRC)/dhry_2.c -o $@
+
+$(O)/t_whets.o: t_whets.c $(SRC)/whets.c $(HDRS)
+	$(CC) $(KFLAGS) -c t_whets.c -o $@
+
+$(O)/t_arith.o: t_arith.c $(HDRS)
+	$(CC) $(KFLAGS) $(ARITHFLAGS) -c t_arith.c -o $@
+
+$(O)/t_hanoi.o: t_hanoi.c $(HDRS)
+	$(CC) $(KFLAGS) -c t_hanoi.c -o $@
+
+clean:
+	rm -rf obj obj-r4k ubench ubench-r4k
