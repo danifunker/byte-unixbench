@@ -207,16 +207,58 @@ make -f Makefile.irix all
   installed, build with `NONSHARED=`.
 - **ISA:** IRIX 5.3 only has the 32-bit o32 ABI, so MIPS II is the
   highest ISA you can build for. `-mips3` and `-mips4` need IRIX 6's
-  n32 or 64-bit ABI.
+  n32 ABI (see below).
 - **CPU check:** the `System:` line shows the CPU chip, its revision and
   its clock speed, taken from the hardware inventory as `hinv` reports it.
   `ubench-r4k` refuses to run on an R2000/R3000 unless you pass `-f`.
 - **Timing:** `gettimeofday()`, and the alarm uses `alarm()`/SIGALRM.
 
-Ready-built copies are in `release/` as `ubench-irix` and `ubench-irix-r4k`
+Ready-built copies are in `release/` as `ubench-irix53` and `ubench-irix53-r4k`
 (built with the defaults above on IRIX 5.3). They are static, linked
 `-non_shared`, so they need nothing installed: copy one over, `chmod +x`
 it and run it.
+
+### MIPS III and IV (IRIX 6.2 and later)
+
+MIPS III code uses 64-bit registers. IRIX 5.3's o32 ABI saves only their
+low halves on a context switch, so MIPS III and IV builds need IRIX 6.2
+or later and its **n32** ABI, built with MIPSpro 7.x `cc` (IDO 5.3 has no
+`-n32`). n32 works on the 32-bit IRIX 6 kernels as well, Indy included.
+The 64-bit ABI (`-64`) would also need a 64-bit kernel and gains nothing
+here, so it isn't built.
+
+```
+make -f Makefile.irix n32
+./ubench-mips4
+```
+
+| Target | Binary | Flags for the kernels | Runs on |
+|---|---|---|---|
+| `mips3` | `ubench-mips3` | `-n32 -mips3` | R4000/R4400/R4600/R4700 and later |
+| `mips4` | `ubench-mips4` | `-n32 -mips4 -r5000` | R5000, R8000, R10000, R12000 |
+
+- **What n32 adds:** the full 64-bit integer registers, 32
+  double-precision FP registers (o32 has 16), and 8 arguments passed in
+  registers. MIPS IV adds FP and integer conditional moves, indexed FP
+  loads and stores, and multiply-add. `-r5000` schedules for the R5000
+  pipeline, but the code runs on any MIPS IV CPU. For an R10000 or R12000
+  machine, `MIPS4CPU="-mips4 -r10000"` schedules for its out-of-order
+  core instead.
+- **Linking:** n32 has no static libraries, so these builds link
+  dynamically. They need IRIX 6.2 or later at run time.
+- **CPU check:** the runner and platform layer are built `-mips3`, so
+  `ubench-mips4` refuses to run on an R4x00 unless you pass `-f`.
+- **MIPSpro licence:** MIPSpro checks for a FLEXlm licence in
+  `/var/flexlm/license.dat`. Without one, it prints a long "requires a
+  license password" message for each file. It may still produce objects,
+  but install the licence before building results you intend to publish.
+- **o32 on IRIX 6:** n32 is the default ABI there. To build the o32
+  binaries on the same machine, pass `O32ABI=-o32`;
+  `make -f Makefile.irix O32ABI=-o32 all6` builds all four.
+
+Ready-built copies are in `release/` as `ubench-irix6-mips3` and
+`ubench-irix6-mips4`, built with MIPSpro 7.4 on IRIX 6.5.22 using the
+defaults above. So far they have only been run on an emulated R5000 Indy.
 
 ## CPU-specific builds
 
@@ -314,7 +356,7 @@ build-dos.sh    DJGPP cross build in Docker
 build-sparc.sh  SPARC cross build in Docker
 build-solaris.sh  Solaris 8 SPARC cross build in Docker
 build-pint.sh   NT 4.0 on ARM (PINT) cross build in Docker
-Makefile.irix   SVR4 make, for IRIX 5.3 (IDO cc or gcc)
+Makefile.irix   SVR4 make, for IRIX 5.3 (IDO) and IRIX 6 n32 (MIPSpro), or gcc
 ```
 
 ## How it differs from the Unix build

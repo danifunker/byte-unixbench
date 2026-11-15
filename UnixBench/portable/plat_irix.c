@@ -5,9 +5,10 @@
  *  on IRIX 6.x.  Uses only calls IRIX 5.3 already had: gettimeofday(),
  *  alarm(), uname(), sysmp() and the hardware inventory (getinvent()).
  *
- *  This file is always compiled for MIPS I, whatever ISA the benchmark
- *  kernels are built for, so a MIPS II (R4000) build started on an R3000
- *  can still say so instead of dying with an illegal instruction.
+ *  This file is compiled for the lowest ISA of its ABI (MIPS I for o32,
+ *  MIPS III for n32), whatever ISA the benchmark kernels are built for, so
+ *  e.g. a MIPS IV build started on an R4400 can still say so
+ *  instead of dying with an illegal instruction.
  ******************************************************************************/
 
 /* Ask for the two-argument gettimeofday() prototype.  Without it IRIX
@@ -27,7 +28,13 @@
 
 /* CPU-specific builds are selected with -DUB_TARGET_<variant>.  The level
    is the MIPS ISA the kernels were compiled for. */
-#if defined(UB_TARGET_R4000)
+#if defined(UB_TARGET_MIPS4)
+#define UB_TARGET_NAME  "MIPS IV (R5000 and later), n32 -mips4"
+#define UB_TARGET_ISA   4
+#elif defined(UB_TARGET_MIPS3)
+#define UB_TARGET_NAME  "MIPS III (R4000), n32 -mips3"
+#define UB_TARGET_ISA   3
+#elif defined(UB_TARGET_R4000)
 #define UB_TARGET_NAME  "MIPS II (R4000), -mips2"
 #define UB_TARGET_ISA   2
 #else
@@ -139,15 +146,27 @@ static const char *plat_cpu_name(unsigned long prid)
     return NULL;
 }
 
-/* MIPS ISA level the CPU implements, as far as IRIX 5.3's o32 ABI can use
-   it: everything from the R4000 on runs MIPS II code. */
+/* Highest MIPS ISA level the CPU implements.  The R4000 family is MIPS
+   III; the R5000, R8000, R10000 and R12000 are MIPS IV.  Unknown CPUs are
+   assumed new enough. */
 static int plat_cpu_isa(unsigned long prid)
 {
     unsigned imp = (unsigned)((prid >> 8) & 0xff);
 
-    if (imp == IMP_R2000 || imp == IMP_R3000)
+    switch (imp) {
+    case IMP_R2000:
+    case IMP_R3000:
         return 1;
-    return 2;
+    case IMP_R6000:
+    case IMP_R6000A:
+        return 2;
+    case IMP_R4000:
+    case IMP_R4600:
+    case IMP_R4650:
+    case IMP_R4700:
+        return 3;
+    }
+    return 4;
 }
 
 int plat_check_target(char *buf, int len)

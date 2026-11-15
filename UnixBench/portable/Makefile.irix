@@ -1,30 +1,59 @@
-# UnixBench portable harness - makefile for SGI IRIX 5.3 (and later)
+# UnixBench portable harness - makefile for SGI IRIX
 #
+# IRIX 5.3 (o32 ABI, IDO 5.3 cc):
 #   make -f Makefile.irix             generic MIPS I build: ubench
-#   make -f Makefile.irix r4k         MIPS II build for R4000 and later:
-#                                     ubench-r4k
+#   make -f Makefile.irix r4k         MIPS II, R4000 and later: ubench-r4k
 #   make -f Makefile.irix all         both
+#
+# IRIX 6.2 and later (n32 ABI, MIPSpro 7.x cc):
+#   make -f Makefile.irix mips3       MIPS III, R4000 and later: ubench-mips3
+#   make -f Makefile.irix mips4       MIPS IV, R5000/R8000/R10000 and later:
+#                                     ubench-mips4
+#   make -f Makefile.irix n32         both
+#   make -f Makefile.irix O32ABI=-o32 all6
+#                                     all four (o32 builds on IRIX 6 need
+#                                     -o32, since n32 is the default there)
+#
 #   make -f Makefile.irix clean
 #
 # Plain SVR4 make syntax, so IRIX's own /usr/bin/make (or smake) works;
 # GNU make is not needed.
 #
-# Defaults are for the IRIX Development Option (IDO) 5.3 cc.  For gcc, e.g.
+# For gcc, e.g.
 #
 #   make -f Makefile.irix CC=gcc CFLAGS="-O3 -ffast-math" NONSHARED= \
-#        R4KCPU="-mips2 -mcpu=r4000" r4k
+#        O32OLIMIT= ARITHFLAGS=-O0 R4KCPU="-mips2 -mcpu=r4000" r4k
+#   make -f Makefile.irix CC=gcc CFLAGS="-O3 -ffast-math" ARITHFLAGS=-O0 \
+#        N32OLIMIT= N32ABI=-mabi=n32 MIPS3CPU=-mips3 \
+#        MIPS4CPU="-mips4 -mtune=r5000" mips4
 #
 # (gcc 3.x and later spell the tuning option -march=r4000.)  If you change
 # any flags, quote them along with any results.
 
 CC = cc
 
-# -O2 is IDO's global optimizer.  -Olimit raises the size above which uopt
-# gives up on a routine ("Olimit exceeded") and leaves it unoptimized;
-# Whetstone's main loop and Dhrystone's Proc_0 need it.  -O3 is not used:
-# in IDO it merges all files and can inline Dhrystone's procedures across
-# dhry_1/dhry_2, which the benchmark's rules forbid.
-CFLAGS = -xansi -O2 -Olimit 3000
+# -O2 is the global optimizer.  -O3 is not used: with IDO it merges all
+# files and can inline Dhrystone's procedures across dhry_1/dhry_2, which
+# the benchmark's rules forbid.
+CFLAGS = -xansi -O2
+
+# Raise the size above which the optimizer gives up on a routine and leaves
+# it unoptimized; Whetstone's main loop and Dhrystone's Proc_0 need it.
+# IDO spells it -Olimit; MIPSpro warns that -Olimit is no longer supported
+# and wants -OPT:Olimit (0 means no limit).  For gcc, set both empty.
+O32OLIMIT = -Olimit 3000
+N32OLIMIT = -OPT:Olimit=0
+
+LIBS = -lm
+
+# ---- o32 (IRIX 5.3) ------------------------------------------------------
+#
+# o32 has 32-bit registers only, so MIPS II is as far as it goes.  MIPS II
+# adds branch-likely, sqrt.d, trunc.w.d/round.w.d (double-to-int without
+# changing the FP rounding mode), ll/sc and loads without delay slots.
+O32ABI     =
+GENERICCPU = -mips1
+R4KCPU     = -mips2
 
 # IRIX 5 builds position-independent code for shared libraries by default.
 # Every call then reloads $gp and goes through $t9, which costs Dhrystone
@@ -33,33 +62,46 @@ CFLAGS = -xansi -O2 -Olimit 3000
 # NONSHARED= (and quote that with the results).
 NONSHARED = -non_shared
 
-LIBS = -lm
-
-# ISA flags.  IRIX 5.3 has only the 32-bit o32 ABI, so MIPS II is as far as
-# it goes (-mips3/-mips4 need the n32 or 64-bit ABI of IRIX 6).  MIPS II
-# adds branch-likely, sqrt.d, trunc.w.d/round.w.d (double-to-int without
-# changing the FP rounding mode), ll/sc and loads without delay slots.
-GENERICCPU = -mips1
-R4KCPU     = -mips2
+# ---- n32 (IRIX 6.2 and later) --------------------------------------------
+#
+# n32 keeps 32-bit pointers and longs but uses the full 64-bit registers, 32
+# double-precision FP registers instead of o32's 16, and passes 8 arguments
+# in registers.  It needs MIPS III or later.  MIPS IV (R5000, R8000, R10000)
+# adds FP conditional moves, movn/movz, indexed FP loads/stores and
+# multiply-add.  -r5000 schedules for the R5000 pipeline; the code still
+# runs on any MIPS IV CPU.  For an R10000/R12000 machine, MIPS4CPU="-mips4
+# -r10000" schedules for its out-of-order core instead.
+#
+# n32 has no static libraries, so these builds are dynamically linked.
+N32ABI       = -n32
+MIPS3CPU     = -mips3
+MIPS4CPU     = -mips4 -r5000
+N32NONSHARED =
 
 DHRYFLAGS = -DTIME -DREG=register
 SRC       = ../src
 
-# Set by the generic and r4k targets.  Only the benchmark kernels get
-# CPUFLAGS; the runner and platform layer stay MIPS I so a MIPS II build on
-# an R3000 can report that instead of dying with an illegal instruction.
+# Set by the variant targets.  Only the benchmark kernels get CPUFLAGS; the
+# runner and platform layer get BASECPU, the lowest ISA of the ABI, so a
+# build started on a CPU too old for it can report that instead of dying
+# with an illegal instruction.
 O         = obj
 EXE       = ubench
+ABI       = $(O32ABI)
+BASECPU   = $(GENERICCPU)
 CPUFLAGS  = $(GENERICCPU)
+NS        = $(NONSHARED)
+OLIMIT    = $(O32OLIMIT)
 TARGETDEF =
 
-BFLAGS = $(CFLAGS) $(NONSHARED) $(GENERICCPU)
-KFLAGS = $(CFLAGS) $(NONSHARED) $(CPUFLAGS)
+BFLAGS = $(CFLAGS) $(OLIMIT) $(ABI) $(NS) $(BASECPU)
+KFLAGS = $(CFLAGS) $(OLIMIT) $(ABI) $(NS) $(CPUFLAGS)
 
 # dumb_stuff() in the arith tests ignores its input.  gcc at -O1 and above
 # computes it at compile time and measures nothing (Makefile.dos uses -O0);
-# IDO -O2 does not inline, so the call and its divides stay.  For gcc, set
-# ARITHFLAGS=-O0.  Quote it along with any arith results.
+# IDO -O2 does not inline, so the call and its divides stay.  MIPSpro -O2
+# does not inline across functions either.  For gcc, set ARITHFLAGS=-O0.
+# Quote it along with any arith results.
 ARITHFLAGS =
 
 HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
@@ -67,18 +109,33 @@ HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
 OBJS = $(O)/ubench.o $(O)/plat_irix.o $(O)/t_dhry.o $(O)/dhry_2.o \
        $(O)/t_whets.o $(O)/t_arith.o $(O)/t_hanoi.o
 
-PASS = CC="$(CC)" CFLAGS="$(CFLAGS)" NONSHARED="$(NONSHARED)" \
-       LIBS="$(LIBS)" ARITHFLAGS="$(ARITHFLAGS)" GENERICCPU="$(GENERICCPU)"
+PASS = CC="$(CC)" CFLAGS="$(CFLAGS)" LIBS="$(LIBS)" ARITHFLAGS="$(ARITHFLAGS)"
 
 generic:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj EXE=ubench \
+	    ABI="$(O32ABI)" NS="$(NONSHARED)" OLIMIT="$(O32OLIMIT)" BASECPU="$(GENERICCPU)" \
 	    CPUFLAGS="$(GENERICCPU)" TARGETDEF= build
 
 r4k:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-r4k EXE=ubench-r4k \
+	    ABI="$(O32ABI)" NS="$(NONSHARED)" OLIMIT="$(O32OLIMIT)" BASECPU="$(GENERICCPU)" \
 	    CPUFLAGS="$(R4KCPU)" TARGETDEF=-DUB_TARGET_R4000 build
 
+mips3:
+	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips3 EXE=ubench-mips3 \
+	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    CPUFLAGS="$(MIPS3CPU)" TARGETDEF=-DUB_TARGET_MIPS3 build
+
+mips4:
+	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips4 EXE=ubench-mips4 \
+	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    CPUFLAGS="$(MIPS4CPU)" TARGETDEF=-DUB_TARGET_MIPS4 build
+
 all: generic r4k
+
+n32: mips3 mips4
+
+all6: generic r4k mips3 mips4
 
 build: $(O) $(EXE)
 
@@ -86,7 +143,7 @@ $(O):
 	mkdir $(O)
 
 $(EXE): $(OBJS)
-	$(CC) $(NONSHARED) $(CPUFLAGS) -o $(EXE) $(OBJS) $(LIBS)
+	$(CC) $(ABI) $(NS) $(CPUFLAGS) -o $(EXE) $(OBJS) $(LIBS)
 
 $(O)/ubench.o: ubench.c $(HDRS)
 	$(CC) $(BFLAGS) -c ubench.c -o $@
@@ -110,4 +167,5 @@ $(O)/t_hanoi.o: t_hanoi.c $(HDRS)
 	$(CC) $(KFLAGS) -c t_hanoi.c -o $@
 
 clean:
-	rm -rf obj obj-r4k ubench ubench-r4k
+	rm -rf obj obj-r4k obj-mips3 obj-mips4 ubench ubench-r4k ubench-mips3 \
+	    ubench-mips4

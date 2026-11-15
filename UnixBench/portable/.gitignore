@@ -7,3 +7,5 @@ obj-*/
 build-mac/
 /ubench-sparc-*
 ubench-r4k
+ubench-mips3
+ubench-mips4
