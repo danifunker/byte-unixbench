@@ -258,8 +258,16 @@ because IRIS's FP conversions cost more than real hardware's.
   pipeline, but the code runs on any MIPS IV CPU. For an R10000 or R12000
   machine, `MIPS4CPU="-mips4 -r10000"` schedules for its out-of-order
   core instead.
-- **Linking:** n32 has no static libraries, so these builds link
-  dynamically. They need IRIX 6.2 or later at run time.
+- **Linking:** n32 has no static `libc`, so these builds link
+  `libc.so.1` dynamically and need IRIX 6.2 or later at run time. `libm`
+  is linked statically from MIPSpro's `/usr/lib32/mips3/libm.a`. IRIX 6.2
+  only has the n32 `libm.so` when `compiler_eoe.sw32.lib` is installed,
+  and without it the binaries stop with `rld: Fatal Error: cannot
+  successfully map soname 'libm.so'`. MIPSpro has no MIPS IV `libm.a`, so
+  the MIPS IV builds use the MIPS III one too. Set `N32LIBS=-lm` to link
+  the shared library instead.
+- **Execute bit:** binaries built onto an NFS share may come out
+  `-rw-r--r--`. `chmod +x` them before running them.
 - **CPU check:** the runner and platform layer are built `-mips3`, so
   `ubench-mips4` refuses to run on an R4x00 unless you pass `-f`.
 - **MIPSpro licence:** MIPSpro checks for a FLEXlm licence in
@@ -273,8 +281,10 @@ because IRIS's FP conversions cost more than real hardware's.
 Ready-built copies of all four are in `release/` as `ubench-irix6-mips3`,
 `ubench-irix6-mips4`, `ubench-irix6-mips3-r5k` and
 `ubench-irix6-mips4-default`, built with MIPSpro 7.4 on IRIX 6.5.22 using
-the defaults above. So far they have only been run on an emulated R5000
-Indy.
+the defaults above. `ubench-irix6-mips3` and `ubench-irix6-mips3-r5k`
+have run on IRIX 6.2 (a MiSTer Indy core with an R4600, without
+`compiler_eoe.sw32.lib`) and on IRIX 6.5 under IRIS. The MIPS IV builds
+have only run under IRIS.
 
 ## CPU-specific builds
 

@@ -33,7 +33,7 @@
 #   make -f Makefile.irix CC=gcc CFLAGS="-O3 -ffast-math" NONSHARED= \
 #        O32OLIMIT= ARITHFLAGS=-O0 R4KCPU="-mips2 -mcpu=r4000" r4k
 #   make -f Makefile.irix CC=gcc CFLAGS="-O3 -ffast-math" ARITHFLAGS=-O0 \
-#        N32OLIMIT= N32ABI=-mabi=n32 MIPS3CPU=-mips3 \
+#        N32OLIMIT= N32LIBS=-lm N32ABI=-mabi=n32 MIPS3CPU=-mips3 \
 #        MIPS4CPU="-mips4 -mtune=r5000" mips4
 #
 # (gcc 3.x and later spell the tuning option -march=r4000.)  If you change
@@ -81,7 +81,14 @@ NONSHARED = -non_shared
 # runs on any MIPS IV CPU.  For an R10000/R12000 machine, MIPS4CPU="-mips4
 # -r10000" schedules for its out-of-order core instead.
 #
-# n32 has no static libraries, so these builds are dynamically linked.
+# n32 has no static libc, so these builds are dynamically linked against
+# libc.so.1.  libm is linked statically from MIPSpro's archive instead:
+# IRIX 6.2 only has the n32 libm.so when compiler_eoe.sw32.lib is
+# installed, and many 6.2 systems don't have it ("rld: Fatal Error: cannot
+# successfully map soname 'libm.so'").  MIPSpro ships no MIPS IV libm.a,
+# so all n32 builds use the MIPS III one, which runs on MIPS IV CPUs too.
+# For gcc, or to use the shared library, set N32LIBS=-lm.
+N32LIBS      = /usr/lib32/mips3/libm.a
 N32ABI       = -n32
 MIPS3CPU     = -mips3
 MIPS4CPU     = -mips4 -r5000
@@ -125,36 +132,36 @@ HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
 OBJS = $(O)/ubench.o $(O)/plat_irix.o $(O)/t_dhry.o $(O)/dhry_2.o \
        $(O)/t_whets.o $(O)/t_arith.o $(O)/t_hanoi.o
 
-PASS = CC="$(CC)" CFLAGS="$(CFLAGS)" LIBS="$(LIBS)" ARITHFLAGS="$(ARITHFLAGS)"
+PASS = CC="$(CC)" CFLAGS="$(CFLAGS)" ARITHFLAGS="$(ARITHFLAGS)"
 
 generic:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj EXE=ubench \
-	    ABI="$(O32ABI)" NS="$(NONSHARED)" OLIMIT="$(O32OLIMIT)" BASECPU="$(GENERICCPU)" \
+	    LIBS="$(LIBS)" ABI="$(O32ABI)" NS="$(NONSHARED)" OLIMIT="$(O32OLIMIT)" BASECPU="$(GENERICCPU)" \
 	    CPUFLAGS="$(GENERICCPU)" TARGETDEF= build
 
 r4k:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-r4k EXE=ubench-r4k \
-	    ABI="$(O32ABI)" NS="$(NONSHARED)" OLIMIT="$(O32OLIMIT)" BASECPU="$(GENERICCPU)" \
+	    LIBS="$(LIBS)" ABI="$(O32ABI)" NS="$(NONSHARED)" OLIMIT="$(O32OLIMIT)" BASECPU="$(GENERICCPU)" \
 	    CPUFLAGS="$(R4KCPU)" TARGETDEF=-DUB_TARGET_R4000 build
 
 mips3:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips3 EXE=ubench-mips3 \
-	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    LIBS="$(N32LIBS)" ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
 	    CPUFLAGS="$(MIPS3CPU)" TARGETDEF=-DUB_TARGET_MIPS3 build
 
 mips4:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips4 EXE=ubench-mips4 \
-	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    LIBS="$(N32LIBS)" ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
 	    CPUFLAGS="$(MIPS4CPU)" TARGETDEF="-DUB_TARGET_MIPS4 $(MIPS4SCHED)" build
 
 mips3-r5k:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips3-r5k EXE=ubench-mips3-r5k \
-	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    LIBS="$(N32LIBS)" ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
 	    CPUFLAGS="$(MIPS3R5KCPU)" TARGETDEF="-DUB_TARGET_MIPS3 $(MIPS3R5KSCHED)" build
 
 mips4-default:
 	$(MAKE) -f Makefile.irix $(PASS) O=obj-mips4-default EXE=ubench-mips4-default \
-	    ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
+	    LIBS="$(N32LIBS)" ABI="$(N32ABI)" NS="$(N32NONSHARED)" OLIMIT="$(N32OLIMIT)" BASECPU="$(MIPS3CPU)" \
 	    CPUFLAGS="$(MIPS4DEFCPU)" TARGETDEF=-DUB_TARGET_MIPS4 build
 
 all: generic r4k
