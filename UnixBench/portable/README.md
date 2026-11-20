@@ -286,6 +286,58 @@ have run on IRIX 6.2 (a MiSTer Indy core with an R4600, without
 `compiler_eoe.sw32.lib`) and on IRIX 6.5 under IRIS. The MIPS IV builds
 have only run under IRIS.
 
+## Building for HP-UX (PA-RISC)
+
+`Makefile.hpux` builds on the HP-UX machine itself, with HP's ANSI C
+compiler (`/opt/ansic/bin/cc`; the K&R `cc` bundled with HP-UX cannot
+compile it) and HP-UX's own `make`. It was written for HP-UX 10.20 on a
+PA-7100LC (HP 9000/715). Copy the `UnixBench` directory over with LF line
+endings, then:
+
+```
+cd UnixBench/portable
+make -f Makefile.hpux all
+hpux/ubench
+hpux/ubrun
+```
+
+| Target | Makes | Compiled with |
+|---|---|---|
+| (default) | `hpux/ubench` | `-Ae +O2 +DA1.1 +DSPA7000`, archive libraries |
+| `7100lc` | `hpux/ubench-7100lc` | `-Ae +O2 +DA1.1 +DSPA7100LC`, archive libraries |
+| `sys` | `hpux/ubrun` and the stock test programs | `-Ae +O2 +DA1.1 +DSPA7100LC`, shared libc |
+
+- **`ubench`** is the portable harness, as on the other systems. Both
+  builds are PA-RISC 1.1 code and run on any 700-series workstation; they
+  differ in the CPU the compiler scheduled the code for. They are linked
+  against `libc.a` and `libm.a` (`-Wl,-a,archive`), so Dhrystone's
+  `strcpy`/`strcmp` and Whetstone's math calls don't go through
+  shared-library stubs and the binaries don't depend on the release's
+  shared libraries.
+- **`ubrun`** is new with this port. HP-UX has `fork`, pipes and a shell,
+  so the rest of UnixBench runs, but `Run` needs Perl 5 and HP-UX 10.20
+  ships Perl 4. `ubrun.c` is a small C stand-in for `Run`: it runs the
+  twelve stock programs of the System Benchmarks Index (built unchanged
+  from `../src`), one copy each, with `Run`'s durations, pass counts,
+  wall-clock timing and scoring, and prints the full index. It takes the
+  same `-v`, `-q` and `-i` options as `ubench`, plus `-d dir` for the
+  directory the file tests write in (default `hpux/tmp`). A full run takes
+  about 25 minutes. It is plain C89/POSIX and not specific to HP-UX.
+- `hpux/` holds everything `ubrun` needs (`multi.sh`, `tst.sh` and
+  `sort.src` are copied in), so it can be moved as a whole.
+- The `System:` line of `ubench` shows `uname`, the PA-RISC level from
+  `sysconf(_SC_CPU_VERSION)` and the CPU clock the kernel measured
+  (`pstat`'s interval-timer ticks per clock tick).
+- gcc works too; the makefile's header has the flags.
+- Ready-built copies, made on HP-UX 10.20 with HP C A.10.32, are in
+  `release/`: `ubench-hpux-pa11`, `ubench-hpux-pa7100lc` and
+  `unixbench-hpux1020.tar`, the whole `hpux/` directory (unpack it with
+  `tar xf` on HP-UX and run `hpux/ubrun`). They were run on an FPGA
+  recreation of the 715/64 (MiSTer HP9K715 core), not yet on real hardware.
+- `../src/fstime.c` needed one change for a C89 compiler without
+  `snprintf`: `pid` is declared at the top of `main` and formatted with
+  `sprintf`.
+
 ## CPU-specific builds
 
 `ubench.exe` is the **generic** build. It uses no CPU-specific options, so
@@ -365,6 +417,8 @@ mac_console.c   classic Mac OS console window (stdout/stdin)
 plat_psx.c      POSIX implementation: NetBSD/sparc, Solaris/sparc, and
                 cross-checking scores
 plat_irix.c     SGI IRIX implementation
+plat_hpux.c     HP-UX (PA-RISC) implementation
+ubrun.c         C stand-in for Run: runs the stock ../src programs (HP-UX)
 ubench.c/.h     runner: test table, passes, scoring, index, report
 t_dhry.c        Dhrystone main loop + Proc_1..Proc_5 (from dhry_1.c)
 t_whets.c       wraps src/whets.c unchanged
@@ -383,6 +437,7 @@ build-sparc.sh  SPARC cross build in Docker
 build-solaris.sh  Solaris 8 SPARC cross build in Docker
 build-pint.sh   NT 4.0 on ARM (PINT) cross build in Docker
 Makefile.irix   SVR4 make, for IRIX 5.3 (IDO) and IRIX 6 n32 (MIPSpro), or gcc
+Makefile.hpux   HP-UX make, for HP ANSI C or gcc on PA-RISC
 ```
 
 ## How it differs from the Unix build

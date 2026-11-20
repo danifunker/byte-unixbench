@@ -13,6 +13,7 @@
  *                  cross-check scores against the regular UnixBench
  *                  binaries
  *      plat_irix.c SGI IRIX 5.3 (o32) and IRIX 6.x (o32, n32), MIPS
+ *      plat_hpux.c HP-UX 10.x/11.x, PA-RISC
  *
  *  The interface is shaped around what classic Mac OS can do:
  *

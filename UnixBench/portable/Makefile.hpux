@@ -1,0 +1,186 @@
+# UnixBench portable harness - makefile for HP-UX on PA-RISC
+#
+# Written for HP-UX 10.20 with HP's ANSI C compiler (/opt/ansic/bin/cc; the
+# bundled K&R cc in /usr/ccs/bin will not do).
+#
+#   make -f Makefile.hpux             PA-RISC 1.1, scheduled for the first
+#                                     1.1 CPU, the PA-7000: hpux/ubench
+#   make -f Makefile.hpux 7100lc      PA-RISC 1.1, scheduled for the
+#                                     PA-7100LC: hpux/ubench-7100lc
+#   make -f Makefile.hpux sys         the stock UnixBench test programs
+#                                     from ../src and ubrun, which runs them
+#                                     in place of the Perl 5 "Run" script:
+#                                     hpux/ubrun, hpux/dhry2reg, ...
+#   make -f Makefile.hpux all         all three
+#   make -f Makefile.hpux clean
+#
+# Everything lands in hpux/, which can be copied elsewhere as it is.
+#
+# Plain make syntax, so HP-UX's own /usr/bin/make works.
+#
+# For gcc, e.g. (4.2.2 from the HP-UX Porting Centre):
+#
+#   make -f Makefile.hpux CC=gcc CFLAGS=-O2 ARCH=-march=1.1 \
+#        GENERICSCHED=-mschedule=7100 LCSCHED=-mschedule=7100LC \
+#        STATIC=-static ARITHFLAGS=-O0 SYSCFLAGS=-O2 X=-gcc all
+#
+# which makes hpux/ubench-gcc and hpux/ubench-7100lc-gcc (X is a suffix for
+# the ubench binaries; the stock programs keep their names, so build them
+# with one compiler or the other).  If you change any flags, quote them
+# along with any results.
+
+CC = cc
+
+# -Ae is ANSI C with HP-UX's extensions.  +O2 is full optimization within
+# each function.  +O3 and +O4 are not used: they inline, +O4 across files,
+# which Dhrystone's rules forbid.
+CFLAGS = -Ae +O2
+
+# +DA is the instruction set, +DS the CPU the code is scheduled for.  Both
+# default to the machine the compiler runs on, so they are set here to make
+# the same binary whatever it is built on.  The names are those of
+# /opt/langtools/lib/sched.models.  PA-RISC 1.1 covers every 700-series
+# workstation; the PA-7100LC's extra instructions (MAX-1) are not used by
+# the compiler.
+ARCH         = +DA1.1
+GENERICSCHED = +DSPA7000
+LCSCHED      = +DSPA7100LC
+
+# ubench is linked against the archive libraries (libc.a, libm.a), so that
+# Dhrystone's strcpy and strcmp and Whetstone's math functions are called
+# directly and not through shared-library stubs, and so that the binary
+# runs on other HP-UX releases.  Set STATIC= for the shared libraries (and
+# quote that with the results).
+STATIC = -Wl,-a,archive
+LIBS   = -lm
+
+# dumb_stuff() in the arith tests ignores its input.  HP C at +O2 does not
+# inline, so the call and its divides stay.  For gcc, set ARITHFLAGS=-O0.
+ARITHFLAGS =
+
+# The stock programs are built the way ../Makefile builds them, and linked
+# the system's default way (shared libc), as on any UnixBench run.
+SYSCFLAGS = -Ae +O2
+SYSARCH   = $(ARCH) $(LCSCHED)
+
+DHRYFLAGS = -DTIME -DREG=register
+SRC       = ../src
+PGMS      = ../pgms
+TESTDIR   = ../testdir
+OUT       = hpux
+X         =
+
+# Set by the variant targets.
+O         = obj-hpux
+EXE       = $(OUT)/ubench$(X)
+SCHED     = $(GENERICSCHED)
+TARGETDEF = -DUB_TARGET_PA7000
+
+KFLAGS = $(CFLAGS) $(ARCH) $(SCHED)
+
+HDRS = ubench.h plat.h t_arith.h $(SRC)/dhry.h
+
+OBJS = $(O)/ubench.o $(O)/plat_hpux.o $(O)/t_dhry.o $(O)/dhry_2.o \
+       $(O)/t_whets.o $(O)/t_arith.o $(O)/t_hanoi.o
+
+PASS = CC="$(CC)" CFLAGS="$(CFLAGS)" ARCH="$(ARCH)" STATIC="$(STATIC)" \
+       LIBS="$(LIBS)" ARITHFLAGS="$(ARITHFLAGS)" X="$(X)"
+
+SYSPROGS = $(OUT)/ubrun $(OUT)/dhry2reg $(OUT)/whetstone-double \
+           $(OUT)/execl $(OUT)/fstime $(OUT)/pipe $(OUT)/context1 \
+           $(OUT)/spawn $(OUT)/looper $(OUT)/syscall \
+           $(OUT)/multi.sh $(OUT)/tst.sh $(OUT)/sort.src
+
+generic:
+	$(MAKE) -f Makefile.hpux $(PASS) O=obj-hpux$(X) EXE=$(OUT)/ubench$(X) \
+	    SCHED="$(GENERICSCHED)" TARGETDEF=-DUB_TARGET_PA7000 build
+
+7100lc:
+	$(MAKE) -f Makefile.hpux $(PASS) O=obj-hpux-7100lc$(X) \
+	    EXE=$(OUT)/ubench-7100lc$(X) \
+	    SCHED="$(LCSCHED)" TARGETDEF=-DUB_TARGET_PA7100LC build
+
+all: generic 7100lc sys
+
+build: $(O) $(OUT) $(EXE)
+
+sys: $(OUT) $(SYSPROGS)
+
+$(O):
+	mkdir $(O)
+
+$(OUT):
+	mkdir $(OUT)
+
+$(EXE): $(OBJS)
+	$(CC) $(ARCH) $(SCHED) $(STATIC) -o $(EXE) $(OBJS) $(LIBS)
+
+$(O)/ubench.o: ubench.c $(HDRS)
+	$(CC) $(KFLAGS) -c ubench.c -o $@
+
+$(O)/plat_hpux.o: plat_hpux.c plat.h
+	$(CC) $(KFLAGS) $(TARGETDEF) -c plat_hpux.c -o $@
+
+$(O)/t_dhry.o: t_dhry.c $(HDRS)
+	$(CC) $(KFLAGS) $(DHRYFLAGS) -c t_dhry.c -o $@
+
+$(O)/dhry_2.o: $(SRC)/dhry_2.c $(HDRS)
+	$(CC) $(KFLAGS) $(DHRYFLAGS) -c $(SRC)/dhry_2.c -o $@
+
+$(O)/t_whets.o: t_whets.c $(SRC)/whets.c $(HDRS)
+	$(CC) $(KFLAGS) -c t_whets.c -o $@
+
+$(O)/t_arith.o: t_arith.c $(HDRS)
+	$(CC) $(KFLAGS) $(ARITHFLAGS) -c t_arith.c -o $@
+
+$(O)/t_hanoi.o: t_hanoi.c $(HDRS)
+	$(CC) $(KFLAGS) -c t_hanoi.c -o $@
+
+# ---- the stock programs and their runner ---------------------------------
+
+SYSCC = $(CC) $(SYSCFLAGS) $(SYSARCH) -I$(SRC) -DTIME
+
+$(OUT)/ubrun: ubrun.c
+	$(CC) $(SYSCFLAGS) $(SYSARCH) -o $@ ubrun.c -lm
+
+# HZ is only used without -DTIME; ../Makefile passes it all the same.
+$(OUT)/dhry2reg: $(SRC)/dhry_1.c $(SRC)/dhry_2.c $(SRC)/dhry.h
+	$(SYSCC) -DHZ=100 -DREG=register -o $@ $(SRC)/dhry_1.c $(SRC)/dhry_2.c
+
+$(OUT)/whetstone-double: $(SRC)/whets.c
+	$(SYSCC) -DDP -DGTODay -DUNIXBENCH -o $@ $(SRC)/whets.c -lm
+
+$(OUT)/execl: $(SRC)/execl.c $(SRC)/big.c
+	$(SYSCC) -o $@ $(SRC)/execl.c
+
+$(OUT)/fstime: $(SRC)/fstime.c
+	$(SYSCC) -o $@ $(SRC)/fstime.c
+
+$(OUT)/pipe: $(SRC)/pipe.c $(SRC)/timeit.c
+	$(SYSCC) -o $@ $(SRC)/pipe.c
+
+$(OUT)/context1: $(SRC)/context1.c $(SRC)/timeit.c
+	$(SYSCC) -o $@ $(SRC)/context1.c
+
+$(OUT)/spawn: $(SRC)/spawn.c $(SRC)/timeit.c
+	$(SYSCC) -o $@ $(SRC)/spawn.c
+
+$(OUT)/looper: $(SRC)/looper.c $(SRC)/timeit.c
+	$(SYSCC) -o $@ $(SRC)/looper.c
+
+$(OUT)/syscall: $(SRC)/syscall.c $(SRC)/timeit.c
+	$(SYSCC) -o $@ $(SRC)/syscall.c
+
+$(OUT)/multi.sh: $(PGMS)/multi.sh
+	cp $(PGMS)/multi.sh $@
+	chmod 755 $@
+
+$(OUT)/tst.sh: $(PGMS)/tst.sh
+	cp $(PGMS)/tst.sh $@
+	chmod 755 $@
+
+$(OUT)/sort.src: $(TESTDIR)/sort.src
+	cp $(TESTDIR)/sort.src $@
+
+clean:
+	rm -rf obj-hpux obj-hpux-7100lc obj-hpux-gcc obj-hpux-7100lc-gcc $(OUT)

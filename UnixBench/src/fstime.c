@@ -109,6 +109,7 @@ char    *argv[];
 
     int status;
     int i;
+    int pid;
 
     for (i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
@@ -170,9 +171,11 @@ char    *argv[];
     }
     */
 
-    int pid = getpid();
-    snprintf(FNAME0 + sizeof("dummy0"), sizeof(FNAME0) - sizeof("dummy0"), "%d", pid);
-    snprintf(FNAME1 + sizeof("dummy1"), sizeof(FNAME1) - sizeof("dummy1"), "%d", pid);
+    /* C89, and no snprintf (HP-UX 10.20 has none): a pid fits the ten
+       X's of the names. */
+    pid = (int)getpid();
+    sprintf(FNAME0 + sizeof("dummy0"), "%d", pid);
+    sprintf(FNAME1 + sizeof("dummy1"), "%d", pid);
 
     if((f = creat(FNAME0, 0600)) == -1) {
             perror("fstime: creat");
